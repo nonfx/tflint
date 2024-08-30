@@ -10,3 +10,5 @@ type ClientOpts = host2plugin.ClientOpts
 
 // NewClient returns a new gRPC client for host-to-plugin communication.
 var NewClient = host2plugin.NewClient
+
+type ServeOpts = host2plugin.ServeOpts

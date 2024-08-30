@@ -4,16 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/go-plugin"
 	"github.com/terraform-linters/tflint-plugin-sdk/internal"
-	"github.com/terraform-linters/tflint-plugin-sdk/logger"
 	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/fromproto"
-	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/interceptor"
 	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/plugin2host"
 	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/proto"
 	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/toproto"
 	"github.com/terraform-linters/tflint-plugin-sdk/tflint"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -23,8 +19,8 @@ import (
 type GRPCServer struct {
 	proto.UnimplementedRuleSetServer
 
-	impl   tflint.RuleSet
-	broker *plugin.GRPCBroker
+	impl tflint.RuleSet
+	// broker *plugin.GRPCBroker
 	config *tflint.Config
 
 	// TFLint v0.41 and earlier does not check version constraints,
@@ -42,17 +38,17 @@ type ServeOpts struct {
 
 // Serve is a wrapper of plugin.Serve. This is entrypoint of all plugins.
 func Serve(opts *ServeOpts) {
-	plugin.Serve(&plugin.ServeConfig{
-		HandshakeConfig: handshakeConfig,
-		Plugins: map[string]plugin.Plugin{
-			"ruleset": &RuleSetPlugin{impl: opts.RuleSet},
-		},
-		GRPCServer: func(opts []grpc.ServerOption) *grpc.Server {
-			opts = append(opts, grpc.UnaryInterceptor(interceptor.RequestLogging("host2plugin")))
-			return grpc.NewServer(opts...)
-		},
-		Logger: logger.Logger(),
-	})
+	//	plugin.Serve(&plugin.ServeConfig{
+	//		HandshakeConfig: handshakeConfig,
+	//		Plugins: map[string]plugin.Plugin{
+	//			"ruleset": &RuleSetPlugin{impl: opts.RuleSet},
+	//		},
+	//		GRPCServer: func(opts []grpc.ServerOption) *grpc.Server {
+	//			opts = append(opts, grpc.UnaryInterceptor(interceptor.RequestLogging("host2plugin")))
+	//			return grpc.NewServer(opts...)
+	//		},
+	//		Logger: logger.Logger(),
+	//	})
 }
 
 // GetName returns the name of the plugin.
@@ -123,13 +119,13 @@ func (s *GRPCServer) ApplyConfig(ctx context.Context, req *proto.ApplyConfig_Req
 // Check calls plugin rules with a gRPC client that can send requests
 // to the host process.
 func (s *GRPCServer) Check(ctx context.Context, req *proto.Check_Request) (*proto.Check_Response, error) {
-	conn, err := s.broker.Dial(req.Runner)
-	if err != nil {
-		return nil, toproto.Error(codes.InvalidArgument, err)
-	}
-	defer conn.Close()
+	// conn, err := s.broker.Dial(req.Runner)
+	// if err != nil {
+	// 	return nil, toproto.Error(codes.InvalidArgument, err)
+	// }
+	// defer conn.Close()
 
-	client := proto.NewRunnerClient(conn)
+	client := proto.NewRunnerClient(new(clientConn))
 	resp, err := client.GetFiles(ctx, &proto.GetFiles_Request{})
 	if err != nil {
 		return nil, toproto.Error(codes.FailedPrecondition, err)
