@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
-	plugin "github.com/hashicorp/go-plugin"
+	// "cmd"
+
 	"github.com/mitchellh/go-homedir"
 	"github.com/terraform-linters/tflint-plugin-sdk/plugin/host2plugin"
 	"github.com/terraform-linters/tflint/tflint"
@@ -24,59 +24,64 @@ func Discovery(config *tflint.Config) (*Plugin, error) {
 
 	//@todo - try to not run a CMD but run the plugin directly
 
-	clients := map[string]*plugin.Client{}
+	// clients := map[string]*plugin.Client{}
 	rulesets := map[string]*host2plugin.Client{}
 
+	// rulesets["terraform"] = getBundledPlugin()
+
 	for _, pluginCfg := range config.Plugins {
-		installCfg := NewInstallConfig(config, pluginCfg)
-		pluginPath, err := FindPluginPath(installCfg)
-		var cmd *exec.Cmd
-		if os.IsNotExist(err) {
-			if pluginCfg.Name == "terraform" && installCfg.ManuallyInstalled() {
-				log.Print(`[INFO] Plugin "terraform" is not installed, but the bundled plugin is available.`)
-				self, err := os.Executable()
-				if err != nil {
-					return nil, err
-				}
-				cmd = exec.Command(self, "--act-as-bundled-plugin")
-			} else {
-				if installCfg.ManuallyInstalled() {
-					pluginDir, err := getPluginDir(config)
-					if err != nil {
-						return nil, err
-					}
-					return nil, fmt.Errorf(`Plugin "%s" not found in %s`, pluginCfg.Name, pluginDir)
-				}
-				return nil, fmt.Errorf(`Plugin "%s" not found. Did you run "tflint --init"?`, pluginCfg.Name)
-			}
-		} else {
-			cmd = exec.Command(pluginPath)
-		}
+		// installCfg := NewInstallConfig(config, pluginCfg)
+		// pluginPath, err := FindPluginPath(installCfg)
+		// var cmd *exec.Cmd
+		// if os.IsNotExist(err) {
+		// 	if pluginCfg.Name == "terraform" && installCfg.ManuallyInstalled() {
+		// 		log.Print(`[INFO] Plugin "terraform" is not installed, but the bundled plugin is available.`)
+		// 		self, err := os.Executable()
+		// 		if err != nil {
+		// 			return nil, err
+		// 		}
+		// 		cmd = exec.Command(self, "--act-as-bundled-plugin")
+		// 	} else {
+		// 		if installCfg.ManuallyInstalled() {
+		// 			pluginDir, err := getPluginDir(config)
+		// 			if err != nil {
+		// 				return nil, err
+		// 			}
+		// 			return nil, fmt.Errorf(`Plugin "%s" not found in %s`, pluginCfg.Name, pluginDir)
+		// 		}
+		// 		return nil, fmt.Errorf(`Plugin "%s" not found. Did you run "tflint --init"?`, pluginCfg.Name)
+		// 	}
+		// } else {
+		// 	cmd = exec.Command(pluginPath)
+		// }
 
 		if pluginCfg.Enabled {
 			log.Printf(`[INFO] Plugin "%s" found`, pluginCfg.Name)
 
-			client := host2plugin.NewClient(&host2plugin.ClientOpts{
-				Cmd: cmd,
+			client, err := host2plugin.NewClient(&host2plugin.ClientOpts{
+				ServeOpts: &[]host2plugin.ServeOpts{
+					getBundledPlugin(),
+				},
 			})
-			rpcClient, err := client.Client()
+
+			// rpcClient, err := client.Client()
 			if err != nil {
 				return nil, pluginClientError(err, pluginCfg)
 			}
-			raw, err := rpcClient.Dispense("ruleset")
-			if err != nil {
-				return nil, err
-			}
-			ruleset := raw.(*host2plugin.Client)
+			// raw, err := rpcClient.Dispense("ruleset")
+			// if err != nil {
+			// 	return nil, err
+			// }
+			// ruleset := raw.(*host2plugin.Client)
 
-			clients[pluginCfg.Name] = client
-			rulesets[pluginCfg.Name] = ruleset
+			// clients[pluginCfg.Name] = client
+			rulesets[pluginCfg.Name] = client
 		} else {
 			log.Printf(`[INFO] Plugin "%s" found, but the plugin is disabled`, pluginCfg.Name)
 		}
 	}
 
-	return &Plugin{RuleSets: rulesets, clients: clients}, nil
+	return &Plugin{RuleSets: rulesets}, nil
 }
 
 // FindPluginPath returns the plugin binary path.

@@ -2,43 +2,37 @@ package host2plugin
 
 import (
 	"context"
-	"os/exec"
+	"fmt"
 
-	"github.com/hashicorp/go-plugin"
+	"google.golang.org/grpc"
+
 	"github.com/hashicorp/go-version"
 	"github.com/terraform-linters/tflint-plugin-sdk/hclext"
 	"github.com/terraform-linters/tflint-plugin-sdk/logger"
 	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/fromproto"
-	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/interceptor"
 	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/plugin2host"
 	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/proto"
 	"github.com/terraform-linters/tflint-plugin-sdk/plugin/internal/toproto"
 	"github.com/terraform-linters/tflint-plugin-sdk/tflint"
-	"google.golang.org/grpc"
 )
 
 // GRPCClient is a host-side implementation. Host can send requests through the client to plugin's gRPC server.
 type GRPCClient struct {
-	broker *plugin.GRPCBroker
 	client proto.RuleSetClient
 }
 
 // ClientOpts is an option for initializing a Client.
 type ClientOpts struct {
-	Cmd *exec.Cmd
+	// Pass server options in the client to bypass grpc
+	ServeOpts *[]ServeOpts
 }
 
-// NewClient is a wrapper of plugin.NewClient.
-func NewClient(opts *ClientOpts) *plugin.Client {
-	return plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig: handshakeConfig,
-		Plugins: map[string]plugin.Plugin{
-			"ruleset": &RuleSetPlugin{},
-		},
-		Cmd:              opts.Cmd,
-		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
-		Logger:           logger.Logger(),
-	})
+func NewClient(opts *ClientOpts) (*GRPCClient, error) {
+	client := proto.NewRuleSetClient(new(clientConn))
+
+	return &GRPCClient{
+		client: client,
+	}, nil
 }
 
 // RuleSetName returns the name of a plugin.
@@ -120,19 +114,41 @@ func (c *GRPCClient) ApplyConfig(content *hclext.BodyContent, sources map[string
 // Check calls its own plugin implementation with an gRPC client that can send
 // requests to the host process.
 func (c *GRPCClient) Check(runner plugin2host.Server) error {
-	brokerID := c.broker.NextId()
+	// brokerID := c.broker.NextId()
 	logger.Debug("starting host-side gRPC server")
-	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		opts = append(opts, grpc.UnaryInterceptor(interceptor.RequestLogging("plugin2host")))
-		server := grpc.NewServer(opts...)
-		proto.RegisterRunnerServer(server, &plugin2host.GRPCServer{Impl: runner})
-		return server
-	})
+	// go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+	// 	opts = append(opts, grpc.UnaryInterceptor(interceptor.RequestLogging("plugin2host")))
+	// 	server := grpc.NewServer(opts...)
+	// 	proto.RegisterRunnerServer(server, &plugin2host.GRPCServer{Impl: runner})
+	// 	return server
+	// })
 
-	_, err := c.client.Check(context.Background(), &proto.Check_Request{Runner: brokerID})
+	// _, err := c.client.Check(context.Background(), &proto.Check_Request{Runner: brokerID})
 
-	if err != nil {
-		return fromproto.Error(err)
-	}
+	// if err != nil {
+	// 	return fromproto.Error(err)
+	// }
 	return nil
+}
+
+// clientConn is a basic implementation of the ClientConnInterface.
+type clientConn struct {
+	conn *grpc.ClientConn
+}
+
+// NewClientConn creates a new clientConn with the given gRPC ClientConn.
+func NewClientConn(conn *grpc.ClientConn) grpc.ClientConnInterface {
+	return &clientConn{conn: conn}
+}
+
+// Invoke performs a unary RPC and returns after the response is received into reply.
+func (c *clientConn) Invoke(ctx context.Context, method string, args any, reply any, opts ...grpc.CallOption) error {
+	fmt.Println("Invoke", method, args, reply)
+	return c.conn.Invoke(ctx, method, args, reply, opts...)
+}
+
+// NewStream begins a streaming RPC.
+func (c *clientConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	fmt.Println("NewStream", desc, method, opts)
+	return c.conn.NewStream(ctx, desc, method, opts...)
 }
